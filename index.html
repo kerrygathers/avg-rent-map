@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset=utf-8 />
+    <title>The Rent Is Too Damn High</title>
+    <meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
+
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.10.16/css/jquery.dataTables.min.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.3.1/dist/leaflet.css" />
+    <link href="https://fonts.googleapis.com/css?family=Nanum+Gothic" rel="stylesheet">
+
+    <style>
+        body {
+            margin: 0px;
+            height: 100%;
+            width: 100%;
+        }
+
+        header {
+            position: absolute;
+            z-index: 800;
+            width: 68%;
+            background-color: none;
+            z-index: 800;
+        }
+
+        h1 {
+            font-family: 'Nanum Gothic', sans-serif;
+            font-size: 42px;
+            text-align: center;
+            margin-right: 20px;
+            margin-bottom: -15px;
+            margin-top: 10px;
+            color: #ffffff;
+        }
+
+        h2 {
+            font-family: 'Nanum Gothic', sans-serif;
+            text-align: center;
+            color: #ffffff;
+        }
+
+        h3 {
+            font-family: 'Nanum Gothic', sans-serif;
+            font-size: 1.3em;
+            color: #000000;
+            margin: 3px 3px 3px 0px;
+        }
+
+        #map {
+            position: absolute;
+            top: 0px;
+            bottom: 36px;
+            width: 68%;
+        }
+
+        footer {
+            position: fixed;
+            width: 100%;
+            height: 36px;
+            bottom: 0px;
+            left: 0px;
+            background-color: #000000;
+            z-index: 800;
+        }
+
+        p {
+            font-family: 'Nanum Gothic', sans-serif;
+            font-size: 1.3em;
+            color: #ffffff;
+        }
+
+        p.footer {
+            margin-left: 11px;
+            font-size: 12px;
+        }
+
+        p.tooltip {
+            color: #000000;
+            font-size: 1.1em;
+            margin: 0px;
+        }
+
+        a {
+            color: #31a354;
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        a:visited {
+            color: #31a354;
+        }
+
+        .legend {
+            padding: 6px 8px;
+            font-size: 1em;
+            background: rgba(255, 255, 255, 0.8);
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+            border-radius: 5px;
+        }
+
+        .legend h3 {
+            font-family: 'Nanum Gothic', sans-serif;
+            font-size: 1.3em;
+            font-weight: normal;
+            color: #001323;
+            margin: 0 0 10px 0;
+        }
+
+        .legend span {
+            width: 20px;
+            height: 20px;
+            float: left;
+            margin: 0 10px 4px 0;
+        }
+
+        .legend label {
+            font-family: 'Nanum Gothic', sans-serif;
+            font-size: 1.1em;
+        }
+
+        .legend label:after {
+            content: '';
+            display: block;
+            clear: both;
+        }
+
+        /* Style DataTable */
+
+        #table-wrapper {
+            position: absolute;
+            z-index: 700;
+            top: 0px;
+            right: 0px;
+            padding: 3% 1% 1% 1%;
+            width: 30%;
+            height: 100%;
+            background-color: #000000;
+        }
+
+        #rent-table_filter {
+            text-align: left;
+            width: 100%;
+            padding-bottom: 10px;
+        }
+
+        #rent-table_filter input {
+            font-family: 'Nanum Gothic', sans-serif;
+            font-size: 1.1em;
+            width: 91%;
+            height: 30px;
+        }
+
+        table th {
+            font-family: 'Nanum Gothic', sans-serif;
+            color: #ffffff;
+            font-size: .9em;
+        }
+
+        table.dataTable tbody td {
+            font-family: 'Nanum Gothic', sans-serif;
+            vertical-align: middle;
+            font-size: .9em;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>The Rent Is Too Damn High</h1>
+        <h2>Average Residential Rent in the US</h2>
+    </header>
+
+    <div id='map'></div>
+
+    <div id='table-wrapper'>
+        <table id="rent-table" class="display" style="width:100%">
+            <thead>
+                <tr>
+                    <th>County</th>
+                    <th>State</th>
+                    <th>Avg. Rent</th>
+                </tr>
+            </thead>
+        </table>
+    </div>
+
+    <footer>
+        <p class="footer">Map by Kerry Gathers. Data from the US Census Bureau's
+            <a href="https://factfinder.census.gov/faces/nav/jsf/pages/index.xhtml"
+                target="_blank">American FactFinder</a>
+        </p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.3.1.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.3.1/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/simple-statistics@5.2.1/dist/simple-statistics.min.js"></script>
+    <script src="https://cdn.datatables.net/1.10.16/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-csv/0.71/jquery.csv-0.71.min.js"></script>
+
+
+    <script>
+        // add blank map
+        var options = {
+            center: [39, -97],
+            zoom: 4.2,
+            zoomSnap: .1,
+            zoomControl: false
+        }
+        var map = L.map('map', options);
+
+        // Add map tiles
+        var tiles = L.tileLayer('https://cartodb-basemaps-{s}.global.ssl.fastly.net/dark_nolabels/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="http://cartodb.com/attributions">CartoDB</a>',
+            subdomains: 'abcd',
+            maxZoom: 19
+        });
+
+        tiles.addTo(map);
+
+        // add zoom control in bottom right corner
+        map.addControl(L.control.zoom({
+            position: 'bottomright'
+        }));
+
+        // create global variables to access rent data
+        var attributeValue = 'RENT'
+
+        // deferred statements to load data
+        var countiesGeoJson = $.getJSON('data/counties_median_rent_2015.json'),
+            statesGeoJSON = $.getJSON('data/us_states.json')
+
+        // when the data are all ready
+        $.when(countiesGeoJson, statesGeoJSON)
+            .done(function (countiesGeoJson, statesGeoJSON) {
+                // they are both accessible within the callback.
+                drawMap(countiesGeoJson, statesGeoJSON)
+            })
+
+        function drawMap(countiesGeoJson, statesGeoJSON) {
+
+            var countiesLayer = L.geoJson(countiesGeoJson, {
+                // filter out null values
+                filter: function (feature) {
+                    if (feature.properties.RENT != null) {
+                        return feature
+                    }
+                },
+                // add basic styles to counties layer
+                style: function (feature) {
+                    return {
+                        color: '#dddddd',
+                        weight: 1,
+                        fillOpacity: .97,
+                        fillColor: '#1f78b4'
+                    };
+                },
+                // loop through features to add tooltips
+                onEachFeature: function (feature, layer) {
+                    // create shorthand to access layer properties
+                    var props = layer.feature.properties;
+                    // read string rent data as numbers
+                    var value = Number(props.RENT);
+                    // create empty variable for conditional tooltip content
+                    var tooltipName = '';
+                    // create variable for universal tooltip content
+                    var tooltipBody = '<p class="tooltip">Average rent: $' + value.toLocaleString() +
+                        '</p>';
+
+                    // conditional tooltip content for AK, LA, DC
+                    if (props.STATE == 'DC') {
+                        tooltipName = '<h3>' + props.NAME + ' </h3>'
+                    } else if (props.STATE == 'AK') {
+                        tooltipName = '<h3>' + props.NAME + ', ' + props.STATE + '</h3>'
+                    } else if (props.STATE == 'LA') {
+                        tooltipName = '<h3>' + props.NAME + ' Parish, ' + props.STATE + '</h3>'
+                    } else {
+                        tooltipName = '<h3>' + props.NAME + ' County, ' + props.STATE + '</h3>'
+                    }
+                    // Add tooltips to features
+                    layer.bindTooltip(tooltipName + tooltipBody);
+                }
+            }).addTo(map);
+
+            L.geoJson(statesGeoJSON, {
+                style: function (feature, layer) {
+                    return {
+                        fillOpacity: 0,
+                        color: 'white',
+                        weight: 2
+                    }
+                },
+                interactive: false // make layer false interaction so tooltips from below propagate
+            }).addTo(map);
+            // call to new function here gets the data out of the
+            // callback function
+            colorMap(countiesLayer);
+
+            // since you already have the data loaded
+            drawTable(countiesGeoJson);
+
+
+        }
+
+        // create colorMap function to call in getJSON
+        function colorMap(countiesLayer) {
+
+            // variable to store break values generated from getClassBreaks function
+            var breaks = getClassBreaks(countiesLayer);
+
+            // loop through features to apply color based on class breaks
+            countiesLayer.eachLayer(function (layer) {
+
+                // shorthand for accessing layer properties
+                var props = layer.feature.properties;
+
+                // reassign feature style according to feature value and getColor function
+                layer.setStyle({
+                    fillColor: getColor(props[attributeValue], breaks),
+                    color: getColor(props[attributeValue], breaks)
+                });
+            });
+
+            // call drawLegend function
+            drawLegend(breaks);
+        }
+
+        // create function to establish data breaks from range of feature attributes
+        function getClassBreaks(countiesLayer) {
+
+            // create empty Array for storing values
+            var values = [];
+
+            // loop through all the counties, populate values array with rent data
+            countiesLayer.eachLayer(function (layer) {
+                var props = layer.feature.properties;
+                // read string rent data as numbers
+                var value = Number(props.RENT);
+                values.push(value);
+            });
+
+            // determine similar clusters
+            var clusters = ss.ckmeans(values, 5);
+
+            // create an array of the lowest value within each cluster
+            var breaks = clusters.map(function (cluster) {
+                return [cluster[0], cluster.pop()];
+            });
+
+            return breaks; // return Array of class breaks
+        } // end getClassBreaks function
+
+        // create function to assign colors (via ColorBrewer) to features within each break
+        function getColor(d, breaks) {
+
+            if (d <= breaks[0][1]) {
+                return '#ffffcc';
+            } else if (d <= breaks[1][1]) {
+                return '#c2e699';
+            } else if (d <= breaks[2][1]) {
+                return '#78c679';
+            } else if (d <= breaks[3][1]) {
+                return '#31a354'
+            } else if (d <= breaks[4][1]) {
+                return '#006837'
+            }
+        } // end getColor
+
+        // build legend and add to map
+        function drawLegend(breaks) {
+
+            // create a new Leaflet control object, position it bottom left
+            var legend = L.control({
+                position: 'bottomleft'
+            });
+
+            // when the legend is added to the map
+            legend.onAdd = function () {
+
+                // create a new HTML <div> element and give it a class name of "legend"
+                var div = L.DomUtil.create('div', 'legend');
+
+                // append an <h3> tag to the div holding the current attribute
+                div.innerHTML = "<h3>Average Monthly Rent (2015)</h3>";
+
+                // for each of our breaks
+                for (var i = 0; i < breaks.length; i++) {
+                    // determine the color associated with each break value,
+                    // including the lower range value
+                    var color = getColor(breaks[i][0], breaks);
+
+                    // concatenate a <span> tag styled with the color and the range values
+                    // of that class and include a label with the low and a high ends of that class range
+                    div.innerHTML +=
+                        '<span style="background:' + color + '"></span> ' +
+                        '<label>' + '$' + (breaks[i][0]).toLocaleString() + ' &mdash; ' +
+                        '$' + (breaks[i][1]).toLocaleString() + '</label>';
+                }
+
+                // return the populated legend div to be added to the map
+                return div;
+            };
+
+            // add the legend to the map
+            legend.addTo(map);
+        }
+
+        function drawTable(data) {
+
+            $('#rent-table').DataTable({
+                "processing": true,
+                // ajax calls geoJSON
+                "data": data[0].features,
+                // add vertical scroll, set table height
+                "scrollY": "85vh",
+                // display all data on one continuous page
+                "paging": false,
+                // set initial sort to show average rent in decreasing order
+                "order": [
+                    [2, "desc"]
+                ],
+                "scrollCollapse": false,
+                // remove text stating number of entries in table
+                "bInfo": false,
+                "language": {
+                    "search": "_INPUT_",
+                    "searchPlaceholder": "Search for a US County"
+                },
+                // assign data from GeoJSON properties to columns
+                "columns": [{
+                        "data": "properties.NAME"
+                    },
+                    {
+                        "data": "properties.STATE"
+                    },
+                    {
+                        "data": "properties.RENT",
+                        // display rent as currency
+                        "render": $.fn.dataTable.render.number(',', '.', 0, '$')
+                    }
+                ]
+            });
+        }
+
+
+
+    </script>
+
+</body>
+
+</html>
